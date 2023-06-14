@@ -1,6 +1,5 @@
 #[contract]
 
-
 mod ERC20 {
 
     ///////////////////////////////
@@ -19,7 +18,7 @@ mod ERC20 {
         decimal: u18,
         total_supply: u256,
         balanceOf: LeagacyMap::<ContractAddress, u256>,
-        allowance: LeagacyMap::<(ContractAddress, ContractAddress), u256>
+        allowances: LeagacyMap::<(ContractAddress, ContractAddress), u256>
 
     }
 
@@ -73,21 +72,23 @@ mod ERC20 {
 
     }
 
-    fn _mint(_amount:u256) {
+    fn _mint(_recipient:ContractAddress, _amount:u256) {
+        assert(!_recipient.is_zero(), "Reciepient cannot be address 0");
         let caller = get_caller_address();
-        let prev_total_supply = total_supply::read();
-        let prevBal = balanceOf::read(caller);
+        let current_total_supply = total_supply::read();
+        let prevBal = balanceOf::read(recipient);
 
-        balanceOf::write(caller, prevBal + _amount);
+        balanceOf::write(_recipient, prevBal + _amount);
 
-        total_supply::write(prev_total_supply + _amount);
-    
+        total_supply::write(current_total_supply + _amount);
+
+        Transfer(contract_address_const::<0>(), _recipient, amount);
     
     }
 
 
 #[external]
-fn transfer(recipient: ContractAddress, amount: u256) {
+fn transfer(_recipient: ContractAddress, amount: u256) {
     let sender = get_caller_address();
     transfer_helper(sender, recipient, amount);
 }
@@ -121,31 +122,23 @@ fn allowance(owner: ContractAddress, spender: ContractAddress) -> (u256) {
 #[external]
 fn transferFrom(sender: ContractAddress, recipient: ContractAddress, amount: u256) {
     let caller = get_caller_address();
-    let allowance = allowances::read((sender, caller));
+    let allowance_ = allowances::read((sender, caller));
     assert(!sender.is_zero(), 'ERC20: transfer from 0');
     assert(!recipient.is_zero(), 'ERC20: transfer to 0');
     assert(amount <= allowance, 'ERC20: transfer amount exceeds allowance');
-    balances::write(sender, balances::read(sender) - amount);
-    balances::write(recipient, balances::read(recipient) + amount);
+    balanceOf::write(sender, balanceOf::read(sender) - amount);
+    balanceOf::write(recipient, balanceOf::read(recipient) + amount);
     allowances::write((sender, caller), allowance - amount);
     Transfer(sender, recipient, amount);
 }
 
-#[external]
-fn mint(recipient: ContractAddress, amount: u256) {
-    assert(!recipient.is_zero(), 'ERC20: mint to the 0 address');
-    let current_total_supply = total_supply::read();
-    total_supply::write(current_total_supply + amount);
-    balances::write(recipient, balances::read(recipient) + amount);
-    Transfer(contract_address_const::<0>(), recipient, amount);
-}
 
 #[external]
 fn burn(amount: u256) {
     let caller = get_caller_address();
-    let caller_balance = balances::read(caller);
+    let caller_balance = balanceOf::read(caller);
     assert(amount <= caller_balance, 'ERC20: burn amount exceeds balance');
-    balances::write(caller, caller_balance - amount);
+    balanceOf::write(caller, caller_balance - amount);
     total_supply::write(total_supply::read() - amount);
     Transfer(caller, contract_address_const::<0>(), amount);
 }
