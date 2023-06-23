@@ -2,147 +2,153 @@
 
 mod ERC20 {
 
-    ///////////////////////////////
-    ////imports
-    //////////////////////////////
     use starknet::ContractAddress;
+    use zeroable::Zeroable;
     use starknet::get_caller_address;
-    use straknet::Zeroable;
+    use integer::BoundedInt;
 
-    //////////////////////////////
-    /// state variable
-    /////////////////////////////
-    struct Storage{
-        name:felt252,
-        symbol:felt252,
-        decimal: u18,
-        total_supply: u256,
-        balanceOf: LeagacyMap::<ContractAddress, u256>,
-        allowances: LeagacyMap::<(ContractAddress, ContractAddress), u256>
-
+    ///Storage
+    struct Storage {
+        _name: felt252,
+        _symbol: felt252,
+        _decimal: u8,
+        _total_supply: u256,
+        _balance_of: LegacyMap::<ContractAddress, u256>,
+        _allowance: LegacyMap::<(ContractAddress, ContractAddress), u256>,
     }
 
-    
+    //Events
+    #[event]
+    fn Transfer(from: ContractAddress, to:ContractAddress, amount:u256){}
+
+    #[event]
+    fn Approval (owner:ContractAddress, spender:ContractAddress, amount: u256) {}
+
+    // constructor 
     #[constructor]
-    fn constructor(_name:felt252, _symbol:felt252, _decimal:u8, _total_supply:u256) {
-        let msgSnder = get_caller_address();
-        // mutate state
-        name::write(_name);
-        symbol::write(_symbol);
-        decimal::write(_decimal);
-        total_supply::write(_total_supply);
-    
-    
+    fn constructor(name: felt252, symbol: felt252, decimal: u8) {
+        _name::write(name);
+        _symbol::write(symbol);
+        _decimal::write(decimal)
     }
 
-    #[event]
-    fn Transfer(from: ContractAddress, to: ContractAddress, value: u256) {}
 
-    #[event]
-    fn Approval(owner: ContractAddress, spender: ContractAddress, value: u256) {}
-
-    //////////////////////////////////////////
-    ///////////// view functions
-    /////////////////////////////////////////
+    //view function
     #[view]
-    fn get_name() -> felt256 {
-       return name::read();
+    fn get_name() -> felt252 {
+        // return _name::read();
+        _name::read()
     }
 
     #[view]
-    fn get_symbol() -> felt256 {
-       return symbol::read();
+    fn get_symbol() -> felt252 {
+        _symbol::read()
+    }
+
+    #[view]
+    fn get_decimals() -> u8 {
+        _decimal::read()
     }
 
     #[view]
     fn get_total_supply() -> u256 {
-       return total_supply::read();
-
+        _total_supply::read()
     }
 
     #[view]
-    fn get_decimal() -> u8 {
-        return decimal::read();
-    
+    fn get_balance_of(account: ContractAddress) -> u256 {
+        _balance_of::read(account)
     }
 
     #[view]
-    fn get_balance_of(_account:ContractAddress) -> u256 {
-        return balanceOf::read(_account);
-
-    }
-
-    fn _mint(_recipient:ContractAddress, _amount:u256) {
-        assert(!_recipient.is_zero(), "Reciepient cannot be address 0");
-        let caller = get_caller_address();
-        let current_total_supply = total_supply::read();
-        let prevBal = balanceOf::read(recipient);
-
-        balanceOf::write(_recipient, prevBal + _amount);
-
-        total_supply::write(current_total_supply + _amount);
-
-        Transfer(contract_address_const::<0>(), _recipient, amount);
-    
+    fn get_allowance(owner: ContractAddress, spender:ContractAddress) -> u256 {
+        _allowance::read((owner, spender))
     }
 
 
-#[external]
-fn transfer(_recipient: ContractAddress, amount: u256) {
-    let sender = get_caller_address();
-    transfer_helper(sender, recipient, amount);
-}
+    //external functions
+    #[external]
+    fn mint(to: ContractAddress, amount: u256)  {
+        assert(!to.is_zero(), 'ERC20: Adddress zero');
 
-fn transfer_helper(sender: ContractAddress, recipient: ContractAddress, amount: u256) {
-    assert(!sender.is_zero(), 'ERC20: transfer from 0');
-    assert(!recipient.is_zero(), 'ERC20: transfer to 0');
-    balances::write(sender, balances::read(sender) - amount);
-    balances::write(recipient, balances::read(recipient) + amount);
-    Transfer(sender, recipient, amount);
-}
+        _balance_of::write(to, _balance_of::read(to) + amount);
+        _total_supply::write(_total_supply::read() + amount);
 
-#[external]
-fn approve(spender: ContractAddress, amount: u256) {
-    let owner = get_caller_address();
-    approve_helper(owner, spender, amount);
-}
+        Transfer(Zeroable::zero(), to, amount);
+    }
 
-fn approve_helper(owner: ContractAddress, spender: ContractAddress, amount: u256) {
-    assert(!owner.is_zero(), 'ERC20: approve from 0');
-    assert(!spender.is_zero(), 'ERC20: approve to 0');
-    allowances::write((owner, spender), amount);
-    Approval(owner, spender, amount);
-}
+    #[external]
+    fn burn(amount: u256) -> bool {
+        let msg_sender = get_caller_address();
 
-#[external]
-fn allowance(owner: ContractAddress, spender: ContractAddress) -> (u256) {
-    return allowances::read((owner, spender));
-}
+        _balance_of::write(msg_sender, _balance_of::read(msg_sender) - amount);
 
-#[external]
-fn transferFrom(sender: ContractAddress, recipient: ContractAddress, amount: u256) {
-    let caller = get_caller_address();
-    let allowance_ = allowances::read((sender, caller));
-    assert(!sender.is_zero(), 'ERC20: transfer from 0');
-    assert(!recipient.is_zero(), 'ERC20: transfer to 0');
-    assert(amount <= allowance, 'ERC20: transfer amount exceeds allowance');
-    balanceOf::write(sender, balanceOf::read(sender) - amount);
-    balanceOf::write(recipient, balanceOf::read(recipient) + amount);
-    allowances::write((sender, caller), allowance - amount);
-    Transfer(sender, recipient, amount);
-}
+        Transfer(msg_sender, Zeroable::zero(), amount);
+
+        true
+    }
+
+    #[external]
+    fn transfer(to: ContractAddress, amount: u256) -> bool {
+        let msg_sender = get_caller_address();
+
+        _transfer(msg_sender, to, amount);
+
+       true
+    }
+
+    #[external]
+    fn approve(spender: ContractAddress, amount: u256) -> bool {
+        let msg_sender = get_caller_address();
+        _approve(msg_sender, spender, amount);
+        true
+    }
 
 
-#[external]
-fn burn(amount: u256) {
-    let caller = get_caller_address();
-    let caller_balance = balanceOf::read(caller);
-    assert(amount <= caller_balance, 'ERC20: burn amount exceeds balance');
-    balanceOf::write(caller, caller_balance - amount);
-    total_supply::write(total_supply::read() - amount);
-    Transfer(caller, contract_address_const::<0>(), amount);
-}
+    #[external]
+    fn transfer_from(from: ContractAddress, to: ContractAddress, amount: u256) -> bool {
+        let msg_sender = get_caller_address();
+       assert(_spend_allowance(from, msg_sender, amount), 'ERC20: Invalid Allowance');
 
+      assert(_transfer(from, to, amount), 'ERC20: transfer failed');
+      true
+    }
+
+
+    //internal functions
+    #[internal]
+    fn _transfer(from: ContractAddress, to:ContractAddress, amount: u256) -> bool {
+        assert(!from.is_zero(), 'ERC20: Adrress zero');
+        assert(!to.is_zero(), 'ERC20: Address zero');
+        _balance_of::write(from, _balance_of::read(from) - amount);
+        _balance_of::write(to, _balance_of::read(to) + amount);
+        Transfer(from, to, amount);
+        true
+        
+    }
+
+    #[internal]
+    fn _approve(owner: ContractAddress, spender:ContractAddress, amount: u256) -> bool {
+        assert(!owner.is_zero(), 'ERC20: Address Zero');
+        assert(!spender.is_zero(), 'ERC20: Address Zero');
+
+        _allowance::write((owner, spender), amount);
+
+        Approval(owner, spender, amount);
+
+        true
+    }
+
+    #[internal]
+    fn _spend_allowance(owner: ContractAddress, spender: ContractAddress, amount: u256) -> bool {
+        let current_allowance = _allowance::read((owner, spender));
+        
+        if current_allowance != BoundedInt::max() {
+            _approve(owner, spender, (current_allowance - amount));
+        }
+
+        true
+    }
 
 
 
